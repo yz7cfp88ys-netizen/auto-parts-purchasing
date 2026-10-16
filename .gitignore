@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+data/*
+!data/.gitkeep
+backup/*
+!backup/.gitkeep
+docs/qa/
+*.log
+.DS_Store
