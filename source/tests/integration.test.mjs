@@ -45,6 +45,10 @@ test('real SQL / HTTP / SMTP procurement workflow',async t=>{
     const list=await call('/api/admin/inquiries?'+new URLSearchParams({q:reference}));assert.equal(list.data.inquiries.length,1);inquiryId=list.data.inquiries[0].id;
     const {data:d}=await call(`/api/admin/inquiries/${inquiryId}`);assert.equal(d.items.length,2);assert.equal(d.items[0].description,'Test pad revised '+suffix);assert.equal(d.items[0].quantity,12);assert.equal(d.items[1].product_id,null);assert.equal(d.items[1].specifications,'Length 90 cm');assert.equal(d.notification_status,'pending');
   });
+  await t.test('disabled mail preserves the real pending notification without consuming attempts',async()=>{
+    const worker=mailWorker(f.pool,f.config);assert.equal(worker.configured,false);assert.deepEqual(await worker.runOnce(),{configured:false});await worker.stop();
+    const detail=(await call(`/api/admin/inquiries/${inquiryId}`)).data;assert.equal(detail.notification_status,'pending');assert.equal(detail.notification_attempts,0);
+  });
   await t.test('concurrent retries save once and conflicting idempotency keys are rejected',async()=>{
     const results=await Promise.all(Array.from({length:3},()=>call('/api/inquiries',{method:'POST',body:payload,authenticated:false})));
     for(const r of results){assert.equal(r.response.status,201);assert.equal(r.data.reference,reference);}
@@ -74,17 +78,27 @@ test('real SQL / HTTP / SMTP procurement workflow',async t=>{
   });
   await t.test('SMTP failure retains inquiry, retry actually sends via local SMTP protocol',async()=>{
     // Dedicated protocol receiver, not evidence of delivery to an external inbox.
-    const smtp=new SMTPServer({authOptional:true,disabledCommands:['AUTH','STARTTLS'],onData(stream,session,done){let text='';stream.on('data',chunk=>text+=chunk);stream.on('end',()=>{messages.push(text);done();});}}),messages=[];
+    const smtp=new SMTPServer({authOptional:true,disabledCommands:['AUTH','STARTTLS'],onRcptTo(address,session,done){recipients.push(address.address);done();},onData(stream,session,done){let text='';stream.on('data',chunk=>text+=chunk);stream.on('end',()=>{messages.push(text);done();});}}),messages=[],recipients=[];
     smtp.listen(0,'127.0.0.1');await once(smtp.server,'listening');const smtpPort=smtp.server.address().port;
     t.after(()=>new Promise(resolve=>smtp.close(resolve)));
     // Scope outbox processing to this run's job, keeping earlier test records intact.
     await f.pool.execute("UPDATE ams_outbox SET next_attempt_at=DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 1 DAY) WHERE inquiry_id<>? AND status<>'sent'",[inquiryId]);
-    let worker=mailWorker(f.pool,{...f.config,smtp:{host:'127.0.0.1',port:smtpPort,secure:false,requireTLS:true,connectionTimeout:2000,socketTimeout:2000},mailFrom:'notify@example.test',mailTo:'operator@example.test'});
+    let worker=mailWorker(f.pool,{...f.config,mailEnabled:true,smtp:{host:'127.0.0.1',port:smtpPort,secure:false,requireTLS:true,connectionTimeout:2000,socketTimeout:2000},mailFrom:'notify@example.test',mailTo:'operator@example.test'});
     assert.equal((await worker.runOnce()).sent,false);await worker.stop();assert.equal((await call(`/api/admin/inquiries/${inquiryId}`)).data.notification_status,'failed');
     assert.equal((await call(`/api/admin/inquiries/${inquiryId}/retry-notification`,{method:'POST',body:{}})).response.status,200);
-    worker=mailWorker(f.pool,{...f.config,smtp:{host:'127.0.0.1',port:smtpPort,secure:false,requireTLS:false},mailFrom:'notify@example.test',mailTo:'operator@example.test'});
-    assert.equal((await worker.runOnce()).sent,true);await worker.stop();assert.equal(messages.length,1);assert.ok(messages[0].includes(reference));assert.ok(messages[0].includes('Unlisted motorcycle cable'));
+    const mailConfig=readConfig({NODE_ENV:'test',DB_USER:f.config.db.user,DB_NAME:f.config.db.database,ADMIN_EMAIL:f.config.adminEmail,ADMIN_PASSWORD_HASH:f.config.passwordHash,MAIL_ENABLED:'true',SMTP_HOST:'127.0.0.1',SMTP_PORT:String(smtpPort),SMTP_SECURE:'false',SMTP_REQUIRE_TLS:'false',SMTP_FROM_EMAIL:'notify@example.test'});
+    assert.equal(mailConfig.mailTo,f.config.adminEmail);worker=mailWorker(f.pool,{...mailConfig,origin:f.base});
+    assert.equal((await worker.runOnce()).sent,true);await worker.stop();assert.equal(messages.length,1);assert.deepEqual(recipients,[f.config.adminEmail]);assert.ok(messages[0].includes(reference));assert.ok(messages[0].includes('Unlisted motorcycle cable'));
     assert.equal((await call(`/api/admin/inquiries/${inquiryId}`)).data.notification_status,'sent');
+  });
+  await t.test('changing administrator email invalidates existing sessions and requires new identity',async()=>{
+    const config={...f.config,adminEmail:'rotated@example.test'},worker=mailWorker(f.pool,config),server=createApp(f.pool,config,fileURLToPath(new URL('../../dist/public/',import.meta.url)),worker).listen(0,'127.0.0.1');await once(server,'listening');
+    try{
+      const base=`http://127.0.0.1:${server.address().port}`;
+      assert.equal((await fetch(base+'/api/admin/session',{headers:{Cookie:cookie}})).status,401);
+      const login=await fetch(base+'/api/auth/login',{method:'POST',headers:{Origin:config.origin,'Content-Type':'application/json'},body:JSON.stringify({email:config.adminEmail,password:f.password})});assert.equal(login.status,200);
+      assert.equal((await call('/api/admin/session')).response.status,200);
+    }finally{await new Promise(resolve=>server.close(resolve));await worker.stop();}
   });
   await t.test('public files and APIs protect customer data and credentials',async()=>{
     for(const url of ['/.env','/source/server/schema.sql','/config/catalog.json','/data/node-local.env'])assert.equal((await fetch(f.base+url)).status,404);

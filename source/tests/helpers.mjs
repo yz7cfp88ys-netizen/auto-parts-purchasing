@@ -12,7 +12,7 @@ export async function fixture(){
   const database=process.env.TEST_DB_NAME;
   if(!database||!/^ams_test(?:_[a-z0-9]+)?$/.test(database))throw new Error('TEST_DB_NAME must name a dedicated ams_test database. Tests never use the business database.');
   const password=randomBytes(24).toString('base64url');
-  const config=readConfig({...process.env,NODE_ENV:'test',DB_NAME:database,PORT:'0',APP_URL:'http://127.0.0.1:3000',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD_HASH:await hashPassword(password),TRUST_PROXY_HOPS:'0',SMTP_HOST:'',SMTP_USER:'',SMTP_PASSWORD:'',MAIL_FROM:'',INQUIRY_NOTIFY_TO:''});
+  const config=readConfig({...process.env,NODE_ENV:'test',DB_NAME:database,PORT:'0',APP_URL:'http://127.0.0.1:3000',ADMIN_EMAIL:'admin@example.test',ADMIN_PASSWORD_HASH:await hashPassword(password),TRUST_PROXY_HOPS:'0',MAIL_ENABLED:'false',SMTP_HOST:'',SMTP_USER:'',SMTP_PASSWORD:'',SMTP_FROM_EMAIL:'',INQUIRY_NOTIFICATION_EMAIL:'',MAIL_FROM:'',INQUIRY_NOTIFY_TO:''});
   let pool=createPool(config);await migrate(pool);
   let server,base,worker;
   async function start(){

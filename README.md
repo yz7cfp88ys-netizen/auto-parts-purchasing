@@ -6,7 +6,7 @@
 - 客户采购清单：目录产品与未上架产品混合提交，数量、规格、车型、联系人和目的地一并保存。
 - 真实询价：数据库事务保存主单、明细、处理历史和邮件任务；获得回执后才显示成功。请求 UUID 保证重试不重复创建。
 - 管理后台：`/admin.html`，密码哈希验证、数据库会话、CSRF、同源校验、输入校验、限流和安全响应头。
-- 邮件：SMTP 通知运营人员，可查看失败、重试和 SMTP 接受状态；失败不丢询价，不把 SMTP 接受写成收件箱送达。
+- 邮件：MAIL_ENABLED=false 时照常保存询价及待通知任务；启用并配置 SMTP 后通知运营人员。通知地址 INQUIRY_NOTIFICATION_EMAIL 默认 ADMIN_EMAIL，发件地址 SMTP_FROM_EMAIL 计划为 parts@automotosourcing.com（待开通）。可查看失败、重试和 SMTP 接受状态，不把 SMTP 接受写成收件箱送达。
 
 完整部署参数、必须提供的私有配置与验收步骤见 [Hostinger 部署说明](docs/hostinger-deployment.md)。本地与公网验证范围见 [Node 验证记录](docs/node-verification.md)。
 

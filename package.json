@@ -10,7 +10,7 @@
     "build": "node source/scripts/build.mjs",
     "build:hostinger": "node source/scripts/build.mjs",
     "check": "node source/scripts/check.mjs",
-    "test": "node --test source/scripts/inquiry.test.mjs source/scripts/delivery.test.mjs",
+    "test": "node --test source/scripts/inquiry.test.mjs source/scripts/delivery.test.mjs source/scripts/config.test.mjs",
     "test:receipt": "node --test source/scripts/receipt.test.mjs",
     "test:orders": "node --test source/scripts/orders.test.mjs",
     "test:search": "node --test source/scripts/search.test.mjs",

@@ -14,7 +14,7 @@ export async function verifyPassword(password, hash) {
   return timingSafeEqual(Buffer.from(expected, 'hex'), actual);
 }
 export function auth(pool, config) {
-  const credentialHash = sha256(config.passwordHash);
+  const credentialHash = sha256(`${config.adminEmail.toLowerCase()}\n${config.passwordHash}`);
   const cookieName = config.production ? '__Host-ams_session' : 'ams_session';
   const cookieOptions = { httpOnly: true, secure: config.production, sameSite: 'strict', path: '/' };
   return {

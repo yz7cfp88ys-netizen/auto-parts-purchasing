@@ -4,14 +4,16 @@ import { readConfig } from './config.js';
 import { createPool, migrate } from './db.js';
 import { createApp } from './app.js';
 import { mailWorker } from './mail.js';
-try { loadEnvFile(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+if (process.env.NODE_ENV !== 'production') {
+  try { loadEnvFile(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+}
 const config = readConfig(), pool = createPool(config);
 try {
   await migrate(pool);
   const worker = mailWorker(pool, config);
   const app = createApp(pool, config, fileURLToPath(new URL('../../dist/public/', import.meta.url)), worker);
   const server = app.listen(config.port, config.host, () => {
-    console.log(`automotosourcing listening on ${config.host}:${config.port}; database connected; SMTP ${worker.configured ? 'configured (delivery must be verified)' : 'not configured'}`);
+    console.log(`automotosourcing listening on ${config.host}:${config.port}; database connected; SMTP ${worker.configured ? 'configured (delivery must be verified)' : config.mailEnabled ? 'not configured' : 'disabled; inquiry notifications remain queued'}`);
     worker.start();
   });
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {

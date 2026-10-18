@@ -4,7 +4,7 @@ import { transaction } from './db.js';
 import { inquiryDetail } from './inquiries.js';
 
 export function mailWorker(pool, config) {
-  const configured = Boolean(config.smtp.host && config.mailFrom && config.mailTo);
+  const configured = Boolean(config.mailEnabled && config.smtp.host && config.mailFrom && config.mailTo);
   const transport = configured ? nodemailer.createTransport(config.smtp) : null;
   let timer, running;
   async function deliver() {
@@ -46,6 +46,6 @@ export function mailWorker(pool, config) {
       timer = setInterval(tick, 15000); timer.unref(); tick();
     },
     async stop() { clearInterval(timer); if (running) await running.catch(() => {}); transport?.close(); },
-    async verify() { if (!transport) throw new Error('SMTP is not configured.'); return transport.verify(); },
+    async verify() { if (!transport) throw new Error('Email notifications are disabled or SMTP is not configured.'); return transport.verify(); },
   };
 }
