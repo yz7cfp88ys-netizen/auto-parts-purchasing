@@ -20,7 +20,7 @@ export function formatInquiry(data) {
     `Company: ${line(data.company)}`, `Business type: ${line(data.business)}`,
     `Destination country: ${line(data.country)}`, `Order type: ${line(data.orderType)}`,
     '', 'PARTS REQUIRED',
-    ...data.parts.map((part, index) => `${index + 1}. ${line(part.description)} | Quantity: ${part.quantity}`),
+    ...data.parts.map((part, index) => `${index + 1}. ${line(part.description)} | Quantity: ${part.quantity}${part.specifications ? ` | Specifications: ${line(part.specifications)}` : ''}`),
     '', `Support requested: ${data.services?.length ? data.services.map(line).join(', ') : 'To be discussed'}`,
     '', 'ADDITIONAL REQUIREMENTS', data.notes?.trim() || 'None provided.',
     '', 'Please confirm product identity, fitment, availability, MOQ, pricing, lead time,',

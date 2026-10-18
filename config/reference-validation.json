@@ -1,0 +1,26 @@
+{
+  "purpose": "Official manufacturer reference for isolated acceptance only. Not automatically imported into the operating catalogue. Supply, price and MOQ are unknown.",
+  "products": [{
+    "sku": "REF-MANN-HU7197X",
+    "name": "Oil filter HU 719/7 x",
+    "brand": "MANN-FILTER",
+    "description": "Manufacturer catalogue reference. Check production date, engine code and vehicle specification before purchase; no supply or price is confirmed.",
+    "image": "",
+    "system": "Filters & maintenance",
+    "category": "Oil filters",
+    "unitPriceCents": null,
+    "moq": null,
+    "supplyStatus": "unconfirmed",
+    "published": true,
+    "source": "https://www.mann-filter.com/uk-en/catalogue/search-results/product.html/hu719/7x_mann-filter.html",
+    "verifiedAt": "2026-10-18T09:05:38Z",
+    "numbers": [
+      {"kind":"manufacturer","brand":"MANN-FILTER","number":"HU 719/7 x","source":"https://www.mann-filter.com/uk-en/catalogue/search-results/product.html/hu719/7x_mann-filter.html","verifiedAt":"2026-10-18T09:05:38Z"},
+      {"kind":"oem","brand":"VW GROUP","number":"071 115 562 A","source":"https://www.mann-filter.com/uk-en/catalogue/search-results/product.html/hu719/7x_mann-filter.html#oe-numbers","verifiedAt":"2026-10-18T09:05:38Z"},
+      {"kind":"cross","brand":"VW GROUP","number":"045 115 466 C","source":"https://www.mann-filter.com/uk-en/catalogue/search-results/product.html/hu719/7x_mann-filter.html#oe-numbers","verifiedAt":"2026-10-18T09:05:38Z"}
+    ],
+    "fitments": [
+      {"type":"auto","make":"AUDI","model":"A2 (8Z)","year":2001,"engine":"1.2 TDI / ANY / 1191 cc / 45 kW","source":"https://www.mann-filter.com/uk-en/catalogue/search-results/product.html/hu719/7x_mann-filter.html — A2 1.2 TDI, engine ANY, production 08/2000–09/2005; 2001 is a full production year within that interval, not a VIN guarantee.","verifiedAt":"2026-10-18T09:05:38Z"}
+    ]
+  }]
+}

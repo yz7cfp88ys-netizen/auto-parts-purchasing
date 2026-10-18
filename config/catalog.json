@@ -1,0 +1,11 @@
+{
+  "currency": "USD",
+  "products": [
+    {"sku":"PB-BRK-001","name":"Brake pad sourcing request","category":"Braking systems","unitPriceCents":null},
+    {"sku":"PB-ENG-001","name":"Engine component sourcing request","category":"Engine & transmission","unitPriceCents":null},
+    {"sku":"PB-SUS-001","name":"Shock absorber sourcing request","category":"Suspension & steering","unitPriceCents":null},
+    {"sku":"PB-ELE-001","name":"Ignition component sourcing request","category":"Electrical & ignition","unitPriceCents":null},
+    {"sku":"PB-FLT-001","name":"Filter sourcing request","category":"Filters & maintenance","unitPriceCents":null},
+    {"sku":"PB-MOT-001","name":"Motorcycle drive component sourcing request","category":"Motorcycle components","unitPriceCents":null}
+  ]
+}

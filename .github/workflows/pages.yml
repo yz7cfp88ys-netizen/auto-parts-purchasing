@@ -1,4 +1,4 @@
-name: Check and deploy website
+name: Verify Node.js Hostinger application
 on:
   push:
     branches: [main]
@@ -7,33 +7,41 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: pages-${{ github.ref }}
+  group: node-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  build:
+  verify:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-only-password
+          MYSQL_DATABASE: ams_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci-only-password"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: ci-only-password
+      TEST_DB_NAME: ams_test
+      BROWSER_CHANNEL: chromium
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
+          cache: npm
+      - run: npm ci
       - run: npm run check
       - run: npm test
       - run: npm run build
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-  deploy:
-    if: github.event_name != 'pull_request' && vars.ENABLE_PAGES == 'true'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - run: npm run check:deployment
+      - run: npm run test:integration
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - run: npm audit --omit=dev

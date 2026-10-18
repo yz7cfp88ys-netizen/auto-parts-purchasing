@@ -1,0 +1,13 @@
+{
+  "domain": "automotosourcing.com",
+  "framework": "express",
+  "nodeVersion": "22",
+  "branch": "main",
+  "rootDirectory": ".",
+  "outputDirectory": ".",
+  "entryFile": "server.js",
+  "packageManager": "npm",
+  "buildCommand": "npm run build",
+  "startCommand": "npm start",
+  "publicDirectory": "dist/public"
+}

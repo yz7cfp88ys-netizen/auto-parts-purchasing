@@ -8,6 +8,7 @@ const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
 if(new Set(ids).size!==ids.length)throw new Error('Duplicate HTML IDs');
 for(const match of html.matchAll(/href="#([^"]+)"/g))if(!ids.includes(match[1]))throw new Error(`Broken anchor: ${match[1]}`);
 for(const match of html.matchAll(/(?:src|href)="\.\/([^"]+)"/g))await access(path.join(root,'source',match[1]));
-for(const file of ['app.js','inquiry.js','scripts/build.mjs','scripts/serve.mjs']){const result=spawnSync(process.execPath,['--check',path.join(root,'source',file)],{encoding:'utf8'});if(result.status!==0)throw new Error(result.stderr);}
+for(const file of ['app.js','inquiry.js','delivery.js','cart.js','orders-client.js','admin.js','search.js','search-admin.js','scripts/build.mjs','scripts/serve.mjs','scripts/serve-orders.mjs']){const result=spawnSync(process.execPath,['--check',path.join(root,'source',file)],{encoding:'utf8'});if(result.status!==0)throw new Error(result.stderr);}
 JSON.parse(await readFile(path.join(root,'config','site.json'),'utf8'));
+JSON.parse(await readFile(path.join(root,'config','reference-validation.json'),'utf8'));
 console.log(`Checked JavaScript syntax, configuration, ${ids.length} unique IDs, local assets and navigation targets.`);

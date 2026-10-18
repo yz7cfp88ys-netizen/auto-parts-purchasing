@@ -1,4 +1,5 @@
 import { formatInquiry } from './inquiry.js';
+import { submitInquiry } from './delivery.js';
 
 const q = (selector) => document.querySelector(selector);
 const stroke = 'fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"';
@@ -21,8 +22,8 @@ const categories = [
 const grid=q('#parts-grid');
 categories.forEach((part,index)=>{
   const article=document.createElement('article');article.className='part-category';article.dataset.vehicle=part.vehicle.join(' ');
-  article.innerHTML=`<div class="part-image"><span class="part-tag">${String(index+1).padStart(2,'0')} / ${part.vehicle.length>1?'AUTO + MOTO':'MOTORCYCLE'}</span><svg viewBox="0 0 240 170" aria-hidden="true">${drawings[part.icon]}</svg></div><div class="part-meta"><div><h3>${part.title}</h3><p>${part.detail}</p></div><button class="part-add" type="button" aria-label="Add ${part.title.toLowerCase()} to inquiry">+</button></div>`;
-  article.querySelector('button').addEventListener('click',()=>{addPart(part.title);toast(`${part.title} added to your inquiry`);});grid.append(article);
+  article.innerHTML=`<div class="part-image"><span class="part-tag">${String(index+1).padStart(2,'0')} / ${part.vehicle.length>1?'AUTO + MOTO':'MOTORCYCLE'}</span><svg viewBox="0 0 240 170" aria-hidden="true">${drawings[part.icon]}</svg></div><div class="part-meta"><div><h3>${part.title}</h3><p>${part.detail}</p></div><button class="part-add" type="button" aria-label="Add ${part.title.toLowerCase()} to cart">+</button></div>`;
+  article.querySelector('button').addEventListener('click',()=>{window.dispatchEvent(new CustomEvent('pb-add-category',{detail:part.title}));location.hash='shop';});grid.append(article);
 });
 document.querySelectorAll('[data-filter]').forEach(button=>button.addEventListener('click',()=>{
   document.querySelectorAll('[data-filter]').forEach(other=>{const active=other===button;other.classList.toggle('active',active);other.setAttribute('aria-pressed',String(active));});
@@ -33,15 +34,27 @@ function addPart(description='') {
   const rows=q('#part-rows');
   if(rows.children.length>=30){toast('You can add up to 30 parts per inquiry.');return;}
   const empty=[...rows.children].find(row=>!row.querySelector('[data-description]').value.trim());
-  if(description&&empty){empty.querySelector('[data-description]').value=description;return;}
+  if(description&&empty){empty.querySelector('[data-description]').value=description;empty.querySelector('[data-quantity]').value='1';empty.querySelector('[data-specifications]').value='';delete empty.dataset.productId;return empty;}
   const id=++rowId;const row=document.createElement('div');row.className='part-row';
   row.innerHTML=`<label for="part-${id}">Part / reference<input id="part-${id}" data-description required maxlength="300" placeholder="Part name or OEM number"></label><label for="qty-${id}">Quantity<input id="qty-${id}" data-quantity type="number" min="1" max="1000000" step="1" value="1" required></label><button type="button" aria-label="Remove part ${id}">×</button>`;
   row.querySelector('[data-description]').value=description;
-  row.querySelector('button').addEventListener('click',()=>{if(rows.children.length===1){row.querySelector('[data-description]').value='';row.querySelector('[data-quantity]').value='1';}else{row.remove();}});
+  const spec=document.createElement('label');spec.textContent='Specifications / vehicle';
+  const specInput=document.createElement('input');specInput.dataset.specifications='';specInput.maxLength=3000;specInput.placeholder='Model, year, dimensions, OEM or other requirements';spec.append(specInput);row.append(spec);
+  row.querySelector('[data-description]').addEventListener('input',()=>{delete row.dataset.productId;});
+  row.querySelector('button').addEventListener('click',()=>{if(rows.children.length===1){row.querySelector('[data-description]').value='';row.querySelector('[data-quantity]').value='1';row.querySelector('[data-specifications]').value='';delete row.dataset.productId;}else{row.remove();}});
   rows.append(row);
   if(id>1&&!description)row.querySelector('input').focus();
+  return row;
 }
 addPart();q('#add-part').addEventListener('click',()=>addPart());
+window.addEventListener('pb-add-category',event=>{addPart(String(event.detail||''));location.hash='inquiry';});
+window.addEventListener('pb-add-catalog-product',event=>{
+  const p=event.detail;if(!p?.id||!p?.name)return;
+  const existing=[...q('#part-rows').children].find(row=>row.dataset.productId===p.id);
+  if(existing){const input=existing.querySelector('[data-quantity]');input.value=String(Math.min(1000000,Number(input.value)+1));}
+  else{const row=addPart(p.name);if(row){row.dataset.productId=p.id;row.querySelector('[data-specifications]').value=p.specifications||'';}}
+  location.hash='inquiry';
+});
 document.querySelectorAll('[data-sourcing]').forEach(link=>link.addEventListener('click',()=>addPart(link.dataset.sourcing)));
 const menu=q('.menu-toggle');const nav=q('#navigation');
 function closeMenu(){nav.classList.remove('open');menu.setAttribute('aria-expanded','false');menu.setAttribute('aria-label','Open navigation');}
@@ -50,30 +63,63 @@ nav.querySelectorAll('a').forEach(link=>link.addEventListener('click',closeMenu)
 window.addEventListener('scroll',()=>q('.header').classList.toggle('scrolled',window.scrollY>20),{passive:true});
 let toastTimer;
 function toast(message){q('#toast').textContent=message;q('#toast').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>q('#toast').classList.remove('visible'),3500);}
-let inquiryText='';let site={};
+let inquiryText='';let site={};let pendingInquiry;let savedReference='';let sendingInquiry;
 q('#inquiry-form').addEventListener('submit',event=>{
   event.preventDefault();const form=new FormData(event.currentTarget);
   const data=Object.fromEntries(form.entries());data.services=form.getAll('services');
-  data.parts=[...q('#part-rows').children].map(row=>({description:row.querySelector('[data-description]').value.trim(),quantity:Number(row.querySelector('[data-quantity]').value)}));
+  if(site.productsEndpoint)data.consent=form.get('consent')==='on';
+  data.parts=[...q('#part-rows').children].map(row=>({description:row.querySelector('[data-description]').value.trim(),quantity:Number(row.querySelector('[data-quantity]').value),specifications:row.querySelector('[data-specifications]').value.trim(),...(row.dataset.productId?{productId:row.dataset.productId}:{})}));
   try{inquiryText=formatInquiry(data);}catch(error){toast(error.message);return;}
+  if(!pendingInquiry||JSON.stringify({...pendingInquiry,requestId:undefined})!==JSON.stringify(data)){
+    pendingInquiry={...data,requestId:globalThis.crypto?.randomUUID?.()||''};savedReference='';
+  }
+  const send=q('#send-inquiry');send.hidden=!site.inquiryEndpoint||!pendingInquiry.requestId;send.disabled=Boolean(savedReference)||sendingInquiry===pendingInquiry;
   q('#inquiry-preview').textContent=inquiryText;q('#inquiry-status').textContent='';
+  if(site.inquiryEndpoint&&!pendingInquiry.requestId)q('#inquiry-status').textContent='Online receipt requires HTTPS. You can download or copy your inquiry instead.';
+  if(savedReference)q('#inquiry-status').textContent=`Inquiry saved on our server. Reference: ${savedReference}. This is not an order; no email delivery is implied.`;
   const email=q('#email-inquiry');email.hidden=!site.email;
   if(site.email)email.href=`mailto:${site.email}?subject=${encodeURIComponent(`Purchasing inquiry — ${data.company}`)}&body=${encodeURIComponent(inquiryText)}`;
   q('#inquiry-dialog').showModal();
 });
+q('#send-inquiry').addEventListener('click',async()=>{
+  const button=q('#send-inquiry');if(!site.inquiryEndpoint||!pendingInquiry||button.disabled)return;
+  const submitted=pendingInquiry;sendingInquiry=submitted;
+  button.disabled=true;q('#inquiry-status').textContent='Submitting inquiry. Please wait for a receipt.';
+  try{
+    const receipt=await submitInquiry(site.inquiryEndpoint,submitted);if(pendingInquiry!==submitted)return;savedReference=receipt.reference;
+    q('#inquiry-status').textContent=`Inquiry saved on our server. Reference: ${receipt.reference}. This is not an order; no email delivery is implied.`;
+  }catch(error){if(pendingInquiry===submitted){q('#inquiry-status').textContent=error.message;button.disabled=false;}}
+  finally{if(sendingInquiry===submitted)sendingInquiry=undefined;}
+});
 q('#download-inquiry').addEventListener('click',()=>{
-  const url=URL.createObjectURL(new Blob([inquiryText],{type:'text/plain;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='partsbridge-purchasing-inquiry.txt';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);q('#inquiry-status').textContent='Your file is ready. Share it with your sourcing partner; this website has not sent it.';
+  const receiptNote=savedReference?`Server receipt: ${savedReference}\n\n`:'';
+  const url=URL.createObjectURL(new Blob([receiptNote+inquiryText],{type:'text/plain;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='partsbridge-purchasing-inquiry.txt';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);q('#inquiry-status').textContent=savedReference?`Your file is ready. Server receipt: ${savedReference}.`:'Your file is ready. Downloading does not submit an inquiry; keep your copy to share.';
 });
 q('#copy-inquiry').addEventListener('click',async()=>{
-  try{await navigator.clipboard.writeText(inquiryText);q('#inquiry-status').textContent='Inquiry copied. You can paste it into your email or message.';}catch{q('#inquiry-status').textContent='Clipboard is unavailable. Select the preview text to copy it, or download the file.';}
+  try{await navigator.clipboard.writeText((savedReference?`Server receipt: ${savedReference}\n\n`:'')+inquiryText);q('#inquiry-status').textContent=savedReference?`Inquiry copied. Server receipt: ${savedReference}.`:'Inquiry copied. You can paste it into your email or message.';}catch{q('#inquiry-status').textContent='Clipboard is unavailable. Select the preview text to copy it, or download the file.';}
 });
 document.querySelectorAll('dialog').forEach(dialog=>{dialog.querySelector('.dialog-close').addEventListener('click',()=>dialog.close());dialog.addEventListener('click',event=>{const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)dialog.close();});});
 const policies={privacy:{title:'Privacy details',content:'<h3>Your inquiry stays with you</h3><p>The inquiry builder processes your details in this browser tab. It does not submit your name, email or parts list to a server, and does not save a draft in browser storage. Reloading the page clears the draft.</p><h3>Downloads and sharing</h3><p>Downloading creates a plain text file on your device. Copying writes to your clipboard when permitted. If a business email is configured, the email action opens your own mail application; you choose whether to send.</p><h3>Website resources</h3><p>This website does not use analytics, advertising cookies or account tracking. The hosting provider may process standard access logs. Fonts are requested from Google Fonts, which receives normal connection information such as IP address.</p>'},terms:{title:'Website terms',content:'<h3>Sourcing information</h3><p>Product categories are illustrative sourcing capabilities, not a stock list or an offer to sell. Product illustrations do not establish exact specification, fitment, certification or availability.</p><h3>Confirm before ordering</h3><p>All quantities, specifications, prices, lead times, inspection arrangements, delivery terms, taxes and payment terms require separate written agreement. No payment or purchase is made on this website.</p><h3>Product suitability</h3><p>Buyers should confirm vehicle compatibility and applicable import, safety and regulatory requirements before purchasing. Inspection scope must be agreed for the individual order.</p>'}};
-document.querySelectorAll('[data-policy]').forEach(button=>button.addEventListener('click',()=>{const policy=policies[button.dataset.policy];q('#policy-title').textContent=policy.title;q('#policy-content').innerHTML=policy.content;q('#policy-dialog').showModal();}));
+document.querySelectorAll('[data-policy]').forEach(button=>button.addEventListener('click',()=>{const policy=policies[button.dataset.policy];q('#policy-title').textContent=policy.title;q('#policy-content').innerHTML=button.dataset.policy==='privacy'&&site.inquiryEndpoint&&!site.orderEndpoint?'<h3>Your draft and submitted inquiry</h3><p>Previewing does not send your details. Choosing Send inquiry sends your contact details, parts, quantities and requirements to this website for responding to your request. A receipt reference is shown only after the server confirms saving the record. Drafts are cleared when you reload.</p><h3>Private storage</h3><p>Submitted records are kept outside the public website folder and are accessible to the hosting account operator. They are not listed or downloadable through the website. Sending does not place an order or guarantee email delivery. Contact the operator to request correction or deletion.</p><h3>Downloads and website resources</h3><p>Download and copy remain available. The hosting provider may process access logs. A hashed sender identifier is used for rate limiting. This website uses no analytics or advertising cookies. Fonts are requested from Google Fonts.</p>':policy.content;q('#policy-dialog').showModal();}));
 q('#year').textContent=new Date().getFullYear();
 try{
   const response=await fetch('./site.json');if(!response.ok)throw new Error('Site settings unavailable');site=await response.json();
+  if(site.inquiryEndpoint){
+    const endpoint=new URL(site.inquiryEndpoint,location.href);if(endpoint.origin!==location.origin)throw new Error('Invalid receipt endpoint');
+    q('#inquiry-intro-copy').textContent='Build a clear purchasing brief. Review your parts, quantities and destination, then send your inquiry or download a copy.';
+    q('#inquiry-privacy-copy').textContent='Previewing keeps your draft in this tab. Choosing Send inquiry saves your details privately on our server for responding to your request. ';
+    q('#review-inquiry').firstChild.textContent='Review inquiry ';
+    q('#inquiry-form-note').textContent='Review before sending. Your details are saved only when you choose Send inquiry and receive a reference. This is not an order.';
+    q('#inquiry-dialog-note').textContent='Review your details before sending. A saved reference confirms server receipt. You can also download or copy your inquiry.';
+    policies.privacy.content='<h3>Your inquiry and privacy</h3><p>Reviewing keeps your draft in this tab. Choosing Send inquiry stores your contact details, specifications and parts list in our private database. Our sourcing team uses this information to respond and receives an email notification. A receipt confirms database storage, not email delivery or a confirmed order. Contact the operator to request correction or deletion.</p><h3>Website resources</h3><p>This site uses no advertising or analytics cookies. Administrators use a secure session cookie. The hosting provider may keep access logs. Google Fonts receives standard connection information.</p>';
+  }
   const contacts=q('#contact-links');
+  if(!site.productsEndpoint)policies.privacy.content+='<h3>Shopping cart storage</h3><p>Your product references and quantities are saved in local browser storage. Pending order details and private access keys stay in session storage for safe retries and order retrieval.</p>';
+  if(site.orderEndpoint){
+    policies.privacy.content='<h3>Cart and procurement orders</h3><p>The cart stores product references and quantities on your device. Submitting a procurement order sends your contact details, shipping address and items to this website and saves them in a private server database. Pending submissions and order keys remain in session storage. Save your access key before closing the browser. Anyone holding your private order or quotation link can view and confirm that order.</p><h3>Quotations and PayPal</h3><p>The operator reviews sourcing details and publishes a full quotation. Choosing PayPal checkout sends the order reference, total and currency to PayPal. Payment is recorded only after server verification. PayPal processes its own account and payment information. Contact the operator to request correction or deletion of order records.</p><h3>Other resources</h3><p>The hosting provider may retain access logs. Google Fonts receives normal connection information. This website uses no analytics or advertising cookies.</p>';
+    policies.terms.content='<h3>Mixed procurement orders</h3><p>Submitting a cart creates one procurement order, initially awaiting sourcing review. Catalogue references describe sourcing requests; exact specifications, fitment, availability and shipping terms must be verified in the complete quotation.</p><h3>Quotation and payment</h3><p>Every quote revision requires customer confirmation of the whole order total. Only then can the full amount be paid through PayPal. Unavailable items may be excluded individually before checkout; revised amounts require fresh confirmation. Once checkout starts, payment must be reconciled before commercial terms can change. Paid orders require an operator-assisted refund or separate agreement for further changes.</p><h3>Shipment and suitability</h3><p>Available products are coordinated in one consolidated shipment. Import duties, taxes, inspection scope and vehicle compatibility are defined in the order quotation. A sandbox payment is a test and never authorizes real shipment.</p>';
+  }
+  if(site.sourcingEndpoint){policies.privacy.content+='<h3>Parts search and photo sourcing</h3><p>Search terms and selected vehicles are sent to this website to query the catalogue. Submitting a sourcing request saves your contact details, part references, vehicle description, reference links and images in private server storage. The operator reviews these records to prepare your quotation. Reference links are stored for review; they are not fetched automatically. Pending request details stay in session storage for safe retries. Contact the operator to request correction or deletion.</p>';policies.terms.content+='<h3>Numbers, fitment and images</h3><p>Exact part-number and verified cross-reference matches identify catalogue records. They do not guarantee compatibility with an unlisted vehicle. Similar numbers and keyword results are candidates only. Images alone never verify fitment. Manufacturer reference information is separate from supplier availability, price and MOQ, which require a written quotation.</p>';}
   if(site.email&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(site.email)){const a=document.createElement('a');a.href=`mailto:${site.email}`;a.textContent='Email us ↗';contacts.append(a);}else site.email='';
   if(/^\d{7,15}$/.test(site.whatsapp||'')){const a=document.createElement('a');a.href=`https://wa.me/${site.whatsapp}`;a.textContent='WhatsApp ↗';a.target='_blank';a.rel='noopener noreferrer';contacts.append(a);}
 }catch{site={};}

@@ -9,6 +9,7 @@ http.createServer(async(req,res)=>{
   try{
     if(req.method!=='GET'&&req.method!=='HEAD'){res.writeHead(405,{Allow:'GET, HEAD'});res.end();return;}
     const pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname);
+    if(pathname.startsWith('/api/')){res.writeHead(503,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'PHP APIs require npm run dev:orders'}));return;}
     const filename=pathname==='/'?'index.html':pathname.slice(1);
     const file=path.resolve(source,filename);
     if(file!==source&&!file.startsWith(source+path.sep)){res.writeHead(403);res.end('Forbidden');return;}

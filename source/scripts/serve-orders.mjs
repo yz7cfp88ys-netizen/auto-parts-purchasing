@@ -1,0 +1,20 @@
+import {spawn,spawnSync} from 'node:child_process';
+import {readFile,mkdir,writeFile,access} from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {randomBytes} from 'node:crypto';
+const root=fileURLToPath(new URL('../../',import.meta.url));
+const build=spawnSync(process.execPath,[path.join(root,'source/scripts/build.mjs'),'--hostinger'],{stdio:'inherit'});if(build.status!==0)process.exit(build.status||1);
+const bundled=path.join(root,'data/runtime/php-8.5.11/php.exe');
+const php=process.env.PHP_BINARY||bundled;
+const privateDir=process.env.ORDER_STORAGE_DIR||path.join(root,'data/orders-private');await mkdir(privateDir,{recursive:true});
+const settings=process.env.ORDER_SETTINGS_FILE||path.join(privateDir,'settings.json');
+try{await access(settings);}catch{await writeFile(settings,JSON.stringify({adminToken:randomBytes(32).toString('hex'),publicBaseUrl:'',paypal:{environment:'sandbox',clientId:'',clientSecret:''}},null,2)+'\n',{flag:'wx',mode:0o600});}
+const port=Number(process.env.PORT||4184),args=[];
+args.push('-d','upload_max_filesize=5M','-d','post_max_size=16M','-d','max_file_uploads=3');
+if(php===bundled)args.push('-d',`extension_dir=${path.join(root,'data/runtime/php-8.5.11/ext')}`,'-d','extension=pdo_sqlite','-d','extension=curl','-d','extension=openssl');
+const probe=spawnSync(php,[...args,'-r','exit(in_array("sqlite",PDO::getAvailableDrivers(),true)?0:1);'],{encoding:'utf8'});
+if(probe.status!==0)throw new Error('PHP with pdo_sqlite required. Set PHP_BINARY or use the existing bundled PHP. '+(probe.stderr||probe.error?.message||''));
+console.log(`Orders: http://127.0.0.1:${port}/#shop\nAdmin: http://127.0.0.1:${port}/admin.html\nPrivate administrator settings: ${settings}\nNo PayPal credentials are created automatically.`);
+const child=spawn(php,[...args,'-S',`127.0.0.1:${port}`,'-t',path.join(root,'data/hostinger-release/public_html')],{env:{...process.env,ORDER_STORAGE_DIR:privateDir,ORDER_SETTINGS_FILE:settings,INQUIRY_STORAGE_DIR:path.join(root,'data/inquiries-private')},stdio:'inherit'});
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>child.kill());child.on('exit',code=>process.exit(code||0));
